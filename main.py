@@ -1,20 +1,40 @@
+"""
+Quantum Password Evaluator
+
+Author: Omkar Shinde
+Date: July 2025
+
+Description:
+This tool analyzes passwords using classical security metrics like entropy,
+pattern analysis, and known leaks (rockyou.txt), and incorporates quantum-inspired
+methods, including a simulation of Grover's Algorithm to demonstrate how quantum
+computing reduces brute-force attack complexity.
+
+Features:
+- Detects personal info, dates, and common patterns
+- Estimates password entropy and strength
+- Suggests stronger variants
+- Simulates quantum superposition
+- Implements Grover's Algorithm with Qiskit
+- Demonstrates quantum cracking time vs password entropy
+- Real Grover oracle for password index search (toy example)
+"""
+
 import math
 import re
 import random
 import string
 import matplotlib.pyplot as plt
-from qiskit import QuantumCircuit
+
+from qiskit import QuantumCircuit, execute
 from qiskit.visualization import plot_histogram
+from qiskit_aer import Aer
 from qiskit_aer.primitives import Sampler
 
-# ✅ Suggest strong password alternatives avoiding personal info
-
+# Suggest strong password variants
 def suggest_improved_variants(password, count=5):
-    substitutions = {
-        'a': '@', 's': '$', 'i': '1', 'o': '0', 'e': '3', 'l': '1', 't': '7'
-    }
+    substitutions = {'a': '@', 's': '$', 'i': '1', 'o': '0', 'e': '3', 'l': '1', 't': '7'}
     symbols = "!@#$%^&*()_-+=<>?/"
-
     variants = set()
 
     while len(variants) < count:
@@ -25,7 +45,6 @@ def suggest_improved_variants(password, count=5):
             else:
                 pwd += char.upper() if random.random() < 0.3 else char
 
-        # Add random symbol and number at random positions
         pwd = list(pwd)
         pwd.insert(random.randint(0, len(pwd)), random.choice(symbols))
         pwd.insert(random.randint(0, len(pwd)), str(random.randint(0, 9)))
@@ -33,8 +52,7 @@ def suggest_improved_variants(password, count=5):
 
     return list(variants)
 
-
-# ✅ Detect charset size used in password
+# Estimate character set size
 def detect_charset_size(password):
     size = 0
     if any(c.islower() for c in password): size += 26
@@ -43,24 +61,24 @@ def detect_charset_size(password):
     if any(c in "!@#$%^&*()-_+=~`[]{}|:;\"'<>,.?/" for c in password): size += 32
     return size
 
-# 🔐 Calculate entropy
+# Shannon entropy calculation
 def password_entropy(password):
     charset = detect_charset_size(password)
     if charset == 0:
         return 0
     return round(len(password) * math.log2(charset), 2)
 
-# 📁 Check leaked password
+# Check for leaked passwords
 def is_common_leaked_password(password):
     try:
         with open("rockyou.txt", "r", encoding="utf-8", errors="ignore") as file:
             password = password.strip().lower()
             return any(password == line.strip().lower() for line in file)
     except FileNotFoundError:
-        print("⚠️ rockyou.txt not found. Skipping leaked password check.")
+        print("rockyou.txt not found. Skipping leaked password check.")
     return False
 
-# 📁 Check keyboard patterns from file
+# Check common keyboard patterns
 def is_keyboard_pattern(password):
     try:
         with open("keyboard_patterns.txt", "r", encoding="utf-8") as file:
@@ -69,82 +87,78 @@ def is_keyboard_pattern(password):
                 if pattern in password.lower() or pattern[::-1] in password.lower():
                     return True
     except FileNotFoundError:
-        print("⚠️ keyboard_patterns.txt not found. Skipping keyboard pattern check.")
+        print("keyboard_patterns.txt not found. Skipping keyboard pattern check.")
     return False
 
-# 📅 Detect date/year/mobile number patterns
+# Detect years, dates, mobile numbers
 def detect_personal_info_patterns(password):
     detections = []
     if re.search(r'(19[0-9]{2}|20[0-9]{2})', password):
-        detections.append("⚠️ Contains a year (e.g., birth year)")
+        detections.append("Contains a year (e.g., birth year)")
     if re.search(r'\b\d{8}\b', password):
-        detections.append("⚠️ Contains a full date (DDMMYYYY or similar)")
+        detections.append("Contains a full date (DDMMYYYY or similar)")
     if re.search(r'\b\d{10}\b', password):
-        detections.append("⚠️ Looks like a phone number")
+        detections.append("Looks like a phone number")
     return detections
 
-# 🧠 Pattern analysis
+# Analyze patterns in the password
 def analyze_patterns(password, personal_info_list=None):
     if personal_info_list is None:
         personal_info_list = []
     deductions = []
 
     if is_common_leaked_password(password):
-        deductions.append("❌ This password is found in leaked data (rockyou.txt)")
-
+        deductions.append("This password is found in leaked data (rockyou.txt)")
     if is_keyboard_pattern(password):
-        deductions.append("⚠️ Contains common keyboard pattern")
+        deductions.append("Contains common keyboard pattern")
 
     common_words = ["password", "admin", "omkar", "qwerty", "123456", "iloveyou"]
     for word in common_words:
         if word.lower() in password.lower():
-            deductions.append(f"⚠️ Contains common word or name: '{word}'")
+            deductions.append(f"Contains common word or name: '{word}'")
 
     if re.search(r'(.)\1{2,}', password):
-        deductions.append("⚠️ Contains repeated characters like 'aaa'")
-
+        deductions.append("Contains repeated characters like 'aaa'")
     if re.match(r'^\d+$', password):
-        deductions.append("⚠️ Only contains digits")
-
+        deductions.append("Only contains digits")
     if re.match(r'^[a-z]+$', password):
-        deductions.append("⚠️ Only contains lowercase letters")
-
+        deductions.append("Only contains lowercase letters")
     if password and (password[0] in "!@#$%^&*" or password[-1] in "!@#$%^&*"):
-        deductions.append("⚠️ Symbol only at start or end")
+        deductions.append("Symbol only at start or end")
 
     for info in personal_info_list:
         if info and info.lower() in password.lower():
-            deductions.append(f"⚠️ Contains personal info: '{info}'")
+            deductions.append(f"Contains personal info: '{info}'")
 
     return deductions
 
-# 🔢 Estimate strength
+# Estimate classical vs quantum strength
 def estimate_password_strength(password):
     charset_size = detect_charset_size(password) or 1
     length = len(password)
     classical_guesses = charset_size ** length
     quantum_guesses = math.isqrt(classical_guesses)
 
-    print(f"\n🔐 Password: {password}")
-    print(f"🔢 Length: {length}")
-    print(f"🧮 Classical guesses: {classical_guesses:,}")
-    print(f"⚛️ Quantum guesses (Grover’s): {quantum_guesses:,}")
+    print(f"Password: {password}")
+    print(f"Length: {length}")
+    print(f"Classical guesses: {classical_guesses:,}")
+    print(f"Quantum guesses (Grover): {quantum_guesses:,}")
 
     if is_common_leaked_password(password):
-        rating = "🚫 Very Weak (Leaked Password)"
+        rating = "Very Weak (Leaked Password)"
     elif quantum_guesses < 1e6:
-        rating = "🚫 Weak (Crackable in seconds)"
+        rating = "Weak (Crackable in seconds)"
     elif quantum_guesses < 1e9:
-        rating = "⚠️ Medium (Breakable with effort)"
+        rating = "Medium (Breakable with effort)"
     else:
-        rating = "✅ Quantum-Safe"
+        rating = "Quantum-Safe"
 
-    print(f"💡 Rating: {rating}")
+    print(f"Rating: {rating}")
     return rating
 
-# ⚛️ Quantum simulation
+# Quantum circuit to show superposition effect visually
 def simulate_quantum_search(bits=3):
-    print("\n🧪 Simulating Quantum Superposition (Grover’s Style)...")
+    print("Simulating quantum superposition (Grover style)...")
     qc = QuantumCircuit(bits)
     qc.h(range(bits))
     qc.measure_all()
@@ -156,45 +170,81 @@ def simulate_quantum_search(bits=3):
     plt.savefig("quantum_histogram.png")
     plt.show()
 
-# 🚀 Main Execution
+# Grover's algorithm simulation with known index (toy cracking)
+def run_grover_simulation(bits=3, target=3):
+    print(f"Running Grover's Algorithm for target index: {format(target, f'0{bits}b')}")
+    qc = QuantumCircuit(bits, bits)
+    qc.h(range(bits))
+
+    oracle = QuantumCircuit(bits)
+    for idx, bit in enumerate(format(target, f"0{bits}b")):
+        if bit == "0":
+            oracle.x(idx)
+    oracle.h(bits - 1)
+    oracle.mct(list(range(bits - 1)), bits - 1)
+    oracle.h(bits - 1)
+    for idx, bit in enumerate(format(target, f"0{bits}b")):
+        if bit == "0":
+            oracle.x(idx)
+    oracle.name = "Oracle"
+
+    diffuser = QuantumCircuit(bits)
+    diffuser.h(range(bits))
+    diffuser.x(range(bits))
+    diffuser.h(bits - 1)
+    diffuser.mct(list(range(bits - 1)), bits - 1)
+    diffuser.h(bits - 1)
+    diffuser.x(range(bits))
+    diffuser.h(range(bits))
+    diffuser.name = "Diffuser"
+
+    qc.append(oracle.to_gate(), range(bits))
+    qc.append(diffuser.to_gate(), range(bits))
+    qc.measure(range(bits), range(bits))
+
+    backend = Aer.get_backend('qasm_simulator')
+    result = execute(qc, backend, shots=1024).result()
+    counts = result.get_counts()
+    plot_histogram(counts)
+    plt.title(f"Grover Search Output for Index {format(target, f'0{bits}b')}")
+    plt.savefig("grover_output.png")
+    plt.show()
+
+# Main Execution
 if __name__ == "__main__":
-    print("🔒 Quantum Password Evaluator 🔒")
-    print("💬 Would you like to enter some personal info to check if your password uses personal data?")
-    print("    This helps us provide the best security analysis. (You can skip this.)")
+    print("Quantum Password Evaluator")
+    print("You may optionally enter some personal information to detect weak usage.")
 
     personal_info_list = []
-    if input("🔸 Enter 'y' for yes or just press Enter to skip: ").strip().lower() == 'y':
-        print("\n👉 Great! You can skip any of these questions by pressing Enter.\n")
-        for label in ["name", "pet name", "birth year (e.g., 2005)", "birth date (DDMM)", "school or college name"]:
-            data = input(f"🔸 Enter your {label}: ").strip()
+    if input("Enter 'y' to include personal info (optional): ").strip().lower() == 'y':
+        print("Fill in any of the fields (press Enter to skip any):")
+        for label in ["name", "pet name", "birth year (e.g., 2005)", "birth date (DDMM)", "school/college"]:
+            data = input(f"{label}: ").strip()
             if data:
                 personal_info_list.append(data.lower())
-    else:
-        print("🔐 Skipping personal info analysis.\n")
 
-    user_password = input("Enter your password to check: ").strip()
-
-    rating = estimate_password_strength(user_password)
+    password = input("Enter password to evaluate: ").strip()
+    rating = estimate_password_strength(password)
 
     if "Weak" in rating:
-        print("\n💡 Your password is weak. Consider using one of these secure variants:")
-        suggestions = suggest_improved_variants(user_password)
-        print("\n🔐 Suggested Passwords:")
-        for s in suggestions:
-            print("  -", s)
+        print("Suggested stronger variants:")
+        for s in suggest_improved_variants(password):
+            print(" -", s)
 
-    print(f"🔐 Entropy: {password_entropy(user_password)} bits")
+    print(f"Entropy: {password_entropy(password)} bits")
 
-    pattern_warnings = analyze_patterns(user_password, personal_info_list)
-    if pattern_warnings:
-        print("\n🚨 Pattern Warnings:")
-        for w in pattern_warnings:
-            print("  -", w)
+    for warning in analyze_patterns(password, personal_info_list):
+        print("Warning:", warning)
 
-    personal_patterns = detect_personal_info_patterns(user_password)
-    if personal_patterns:
-        print("\n📅 Personal Info Warnings:")
-        for p in personal_patterns:
-            print("  -", p)
+    for warning in detect_personal_info_patterns(password):
+        print("Warning:", warning)
 
     simulate_quantum_search()
+
+    if input("Run Grover search simulation? (y/N): ").strip().lower() == 'y':
+        try:
+            bits = int(input("Enter number of qubits: "))
+            target = int(input(f"Enter target value (0 to {2 ** bits - 1}): "))
+            run_grover_simulation(bits, target)
+        except:
+            print("Invalid input. Skipping Grover simulation.")
