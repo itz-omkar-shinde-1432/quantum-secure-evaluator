@@ -1,0 +1,23 @@
+{
+  "Password": "omkar",
+  "Entropy": 23.5,
+  "Strength": "Very Weak (Leaked)",
+  "ML_Score": 0.00018243731549369974,
+  "Classical_Guesses": 11881376,
+  "Quantum_Guesses": 3446,
+  "Classical_Crack_Years": 0.0,
+  "Quantum_Crack_Years": 0.0,
+  "Issues": [
+    "Leaked password",
+    "Common word detected: omkar",
+    "Lowercase only"
+  ],
+  "Personal_Hits": [],
+  "Suggestions": [
+    "Om(k3@R",
+    "0m2K@^r",
+    "8omk@r$",
+    "o+mkA6r",
+    "/0m5k@r"
+  ]
+}
